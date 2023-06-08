@@ -4,20 +4,18 @@
   ansible.builtin.copy:
     src: disablePasswordAuth.conf
     dest: /etc/ssh/sshd_config.d/disablePasswordAuth.conf
-  tags: restrict
-  notify: restart sshd
+  notify: restart ssh
 
 - name: Disallow root login
   ansible.builtin.copy:
     src: disableRootLogin.conf
     dest: /etc/ssh/sshd_config.d/disableRootLogin.conf
-  tags: restrict
-  when: root_is_available
-  notify: restart sshd
-
+  notify: restart ssh
+  
 - name: Change ssh port
   ansible.builtin.template:
-    src: ChangePort.j2
-    dest: /etc/ssh/sshd_config.d/ChangePort.conf
-  tags: restrict
-  notify: restart sshd
+    src: ssh.socket.j2
+    dest: /etc/systemd/system/ssh.socket
+  notify: 
+    - restart systemd
+    - restart ssh

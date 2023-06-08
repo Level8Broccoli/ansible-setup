@@ -1,174 +1,52 @@
 ---
-- name: Security sandbox
+- name: Init server
   hosts: all
   gather_facts: false
   become: true
   vars:
-    - user_name: oliver
     - ssh_pub_key: "id_rsa_digitalocean.pub"
-    - ssh_port: 23521
-    - ansible_user: "{{ user_name }}"
-    - root_is_available: true
+    - default_user_name: root
+    - new_user_name: oliver
+    - default_ssh_port: 22
+    - new_ssh_port: 23521
 
-  tasks:
-    - name: Check for users and ports
-      block:
-        - name: Check for root user on port 22
-          ansible.builtin.wait_for:
-            port: 22
-            timeout: 10
-          register: check_root_default
-          vars:
-            - ansible_user: root
-            - host_key_checking: false
-
-        - ansible.builtin.set_fact:
-            root_is_available_on_default: true
-          when: not check_root_default.unreachable
-
-        - name: Check for root user on port {{ ssh_port }}
-          ansible.builtin.wait_for:
-            port: "{{ ssh_port }}"
-            timeout: 10
-          register: check_root_other
-          vars:
-            - ansible_user: root
-
-        - ansible.builtin.set_fact:
-            root_is_available_on_other: true
-          when: not check_root_other.unreachable
-
-        - name: Check for user '{{ user_name }}' on port 22
-          ansible.builtin.wait_for:
-            port: 22
-            timeout: 10
-          register: check_user_default
-
-        - ansible.builtin.set_fact:
-            user_is_available_on_default: true
-          when: not check_user_default.unreachable
-
-        - name: Check for user '{{ user_name }}' on port {{ ssh_port }}
-          ansible.builtin.wait_for:
-            port: "{{ ssh_port }}"
-            timeout: 10
-          register: check_user_other
-
-        - ansible.builtin.set_fact:
-            user_is_available_on_other: true
-          when: not check_user_other.unreachable
-
-        - ansible.builtin.set_fact:
-            root_is_available: true
-          when: root_is_available_on_default or root_is_available_on_other
-
-        - name: Use new port if available
-          ansible.builtin.set_fact:
-            ansible_port: "{{ ssh_port }}"
-          when: root_is_available_on_other_port or user_is_available_on_other_port
-
-      ignore_unreachable: true
-      ignore_errors: true
+  pre_tasks:
+    - name: Setup localhost
+      ansible.builtin.include_role:
+        name: host
       tags: always
 
-    - name: exit
-      fail:
-        msg: exit
+    - name: Investigate user and port
+      ansible.builtin.include_role:
+        name: investigate
+      tags: always
 
-    - name: Setup known_hosts and user
-      block:
-        - name: Scan public keys of all the hosts
-          ansible.builtin.shell:
-            cmd: "ssh-keyscan {{ item }}, `dig +short {{ item }}`"
-          with_items: "{{ groups['all'] }}"
-          register: ssh_known_host_results
-          delegate_to: localhost
-          vars:
-            - host_key_checking: false
-          tags: known_hosts
+    - ansible.builtin.debug:
+        msg:
+          - "User: {{ ansible_user }}"
+          - "SSH Port: {{ ansible_port }}"
+      tags: always
 
-        - name: Update known_hosts
-          ansible.builtin.known_hosts:
-            name: "{{ item.item }}"
-            key: "{{ item.stdout }}"
-            path: "{{ lookup('env', 'HOME') + '/.ssh/known_hosts' }}"
-            state: present
-          with_items: "{{ ssh_known_host_results.results }}"
-          when: ssh_known_host_results.changed
-          delegate_to: localhost
-          tags: known_hosts
-
-        - name: Create sudo user
-          ansible.builtin.user:
-            name: "{{ user_name }}"
-            state: present
-            groups: sudo
-            shell: /bin/bash
-            append: true
-            create_home: true
-          register: user_created
-          tags: user
-
-        - name: Setup passwordless sudo
-          ansible.builtin.lineinfile:
-            path: /etc/sudoers
-            state: present
-            regexp: "^%sudo"
-            line: "%sudo ALL=(ALL) NOPASSWD: ALL"
-            validate: "/usr/sbin/visudo -cf %s"
-          tags: user
-
-        - name: Set authorized key for new user
-          ansible.posix.authorized_key:
-            user: "{{ user_name }}"
-            state: present
-            key: "{{ lookup('file', lookup('env', 'HOME') + '/.ssh/' + ssh_pub_key ) }}"
-          when: user_created.changed
-          tags: user
-
-      ignore_errors: true
-      when: root_is_available
-      vars:
-        - ansible_user: root
-
+  tasks:
     - name: Gathering facts
       ansible.builtin.setup:
       tags: always
 
-    - name: Disallow SSH password authentication
-      ansible.builtin.copy:
-        src: disablePasswordAuth.conf
-        dest: /etc/ssh/sshd_config.d/disablePasswordAuth.conf
+    - name: Setup passwordless sudo
+      ansible.builtin.lineinfile:
+        path: /etc/sudoers
+        state: present
+        regexp: "^%sudo"
+        line: "%sudo ALL=(ALL) NOPASSWD: ALL"
+        validate: "/usr/sbin/visudo -cf %s"
+      tags: sudo
+
+    - name: Setup new user '{{ new_user_name }}'
+      ansible.builtin.include_role:
+        name: user
+      tags: user
+
+    - name: Restrict access
+      ansible.builtin.include_role:
+        name: restrict
       tags: restrict
-      notify: restart sshd
-
-    - name: Disallow root login
-      ansible.builtin.copy:
-        src: disableRootLogin.conf
-        dest: /etc/ssh/sshd_config.d/disableRootLogin.conf
-      tags: restrict
-      when: root_is_available
-      notify: restart sshd
-
-    - name: Change ssh port
-      ansible.builtin.template:
-        src: ChangePort.j2
-        dest: /etc/ssh/sshd_config.d/ChangePort.conf
-      vars:
-
-      tags: restrict
-      notify: restart sshd
-
-    - name: Update apt and install packages
-      ansible.builtin.apt:
-        name:
-          - ufw
-        state: latest
-        update_cache: true
-      tags: firewall
-
-  handlers:
-    - name: restart sshd
-      ansible.builtin.service:
-        name: sshd
-        state: restarted

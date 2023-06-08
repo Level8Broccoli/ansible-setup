@@ -1,21 +1,22 @@
 ---
 
-- name: Scan public keys of all the hosts
-  ansible.builtin.shell:
-    cmd: "ssh-keyscan {{ item }}, `dig +short {{ item }}`"
-  with_items: "{{ groups['all'] }}"
-  register: ssh_known_host_results
-  delegate_to: localhost
-  vars:
-    - host_key_checking: false
-  tags: known_hosts
+- block:
+  - name: Scan public keys of all the hosts
+    ansible.builtin.shell:
+      cmd: "ssh-keyscan {{ item }}, `dig +short {{ item }}`"
+    with_items: "{{ groups['all'] }}"
+    register: ssh_known_host_results
+    vars:
+      - host_key_checking: false
 
-- name: Update known_hosts
-  ansible.builtin.known_hosts:
-    name: "{{ item.item }}"
-    key: "{{ item.stdout }}"
-    path: "{{ lookup('env', 'HOME') + '/.ssh/known_hosts' }}"
-    state: present
-  with_items: "{{ ssh_known_host_results.results }}"
+  - name: Update known_hosts
+    ansible.builtin.known_hosts:
+      name: "{{ item.item }}"
+      key: "{{ item.stdout }}"
+      path: "{{ lookup('env', 'HOME') + '/.ssh/known_hosts' }}"
+      state: present
+    with_items: "{{ ssh_known_host_results.results }}"
+
+  become: false
   delegate_to: localhost
-  tags: known_hosts
+  ignore_errors: true

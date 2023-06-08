@@ -1,0 +1,69 @@
+---
+- block:
+  - ansible.builtin.set_fact:
+      ansible_user: "{{ default_user_name }}"
+      ansible_port: "{{ default_ssh_port }}"
+
+  - name: Check for user '{{ default_user_name }}' on port '{{ default_ssh_port }}'
+    ansible.builtin.wait_for:
+      port: "{{ default_ssh_port }}"
+    register: check_root_default
+    ignore_unreachable: true
+
+  - ansible.builtin.set_fact:
+      found_access: true
+    when: check_root_default.unreachable is not defined and not found_access
+
+  - ansible.builtin.set_fact:
+      ansible_port: "{{ new_ssh_port }}"
+    when: not found_access
+
+  - name: Check for user '{{ default_user_name }}' on port '{{ new_ssh_port }}'
+    ansible.builtin.wait_for:
+      port: "{{ new_ssh_port }}"
+    register: check_root_new
+    ignore_unreachable: true
+    when: not found_access
+
+  - ansible.builtin.set_fact:
+      found_access: true
+    when: check_root_new.unreachable is not defined and not found_access
+
+  - ansible.builtin.set_fact:
+      ansible_user: "{{ new_user_name }}"
+      ansible_port: "{{ default_ssh_port }}"
+    when: not found_access
+
+  - name: Check for user '{{ new_user_name }}' on port '{{ default_ssh_port }}'
+    ansible.builtin.wait_for:
+      port: "{{ default_ssh_port }}"
+    register: check_root_default
+    ignore_unreachable: true
+    when: not found_access
+
+  - ansible.builtin.set_fact:
+      found_access: true
+    when: check_root_default.unreachable is not defined and not found_access
+    
+  - ansible.builtin.set_fact:
+      ansible_port: "{{ new_ssh_port }}"
+    when: not found_access
+
+  - name: Check for user '{{ new_user_name }}' on port '{{ new_ssh_port }}'
+    ansible.builtin.wait_for:
+      port: "{{ new_ssh_port }}"
+    register: check_root_new
+    ignore_unreachable: true
+    when: not found_access
+
+  - ansible.builtin.set_fact:
+      found_access: true
+    when: check_root_new.unreachable is not defined and not found_access
+
+  - ansible.builtin.fail:
+      msg: "No valid port or user could be found"
+    when: not found_access
+
+  vars:
+    - found_access: false
+
