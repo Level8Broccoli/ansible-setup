@@ -51,7 +51,7 @@
         name: restrict
       tags: restrict
 
-    - name: Setup firefall
+    - name: Setup firewall
       ansible.builtin.include_role:
         name: firewall
       tags: firewall
