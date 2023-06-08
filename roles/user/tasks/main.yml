@@ -1,0 +1,20 @@
+---
+
+- name: Create sudo user
+  ansible.builtin.user:
+    name: "{{ user_name }}"
+    state: present
+    groups: sudo
+    shell: /bin/bash
+    append: true
+    create_home: true
+  register: user_created
+  tags: user 
+
+- name: Set authorized key for new user
+  ansible.posix.authorized_key:
+    user: "{{ user_name }}"
+    state: present
+    key: "{{ lookup('file', lookup('env', 'HOME') + '/.ssh/' + ssh_pub_key ) }}"
+  when: user_created.changed
+  tags: user 

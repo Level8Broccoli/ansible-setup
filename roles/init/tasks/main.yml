@@ -1,0 +1,59 @@
+---
+
+- name: Check for root user on port 22
+  ansible.builtin.wait_for:
+    port: 22
+    timeout: 10
+  register: check_root_default 
+  vars:
+    - ansible_user: root
+    - host_key_checking: false
+
+- ansible.builtin.set_fact:
+    root_is_available_on_default: true
+  when: not check_root_default.unreachable
+
+- name: Check for root user on port {{ ssh_port }}
+  ansible.builtin.wait_for:
+    port: "{{ ssh_port }}"
+    timeout: 10
+  register: check_root_other
+  vars:
+    - ansible_user: root
+
+- ansible.builtin.set_fact:
+    root_is_available_on_other: true
+  when: not check_root_other.unreachable
+
+- name: Check for user '{{ user_name }}' on port 22
+  ansible.builtin.wait_for:
+    port: 22
+    timeout: 10
+  register: check_user_default
+
+- ansible.builtin.set_fact:
+    user_is_available_on_default: true
+  when: not check_user_default.unreachable
+
+- name: Check for user '{{ user_name }}' on port {{ ssh_port }}
+  ansible.builtin.wait_for:
+    port: "{{ ssh_port }}"
+    timeout: 10
+  register: check_user_other
+
+- ansible.builtin.set_fact:
+    user_is_available_on_other: true
+  when: not check_user_other.unreachable
+
+- ansible.builtin.set_fact:
+    root_is_available: true
+  when: root_is_available_on_default or root_is_available_on_other
+
+- name: Use new port if available
+  ansible.builtin.set_fact:
+    ansible_port: "{{ ssh_port }}"
+  when: root_is_available_on_other_port or user_is_available_on_other_port
+
+ignore_unreachable: true
+ignore_errors: true
+tags: always

@@ -1,0 +1,111 @@
+---
+
+- name: Security sandbox
+  hosts: all
+  gather_facts: false
+  become: true
+  vars: 
+    - user_name: oliver
+    - ssh_pub_key: "id_rsa_digitalocean.pub"
+    - ssh_port: 23521
+    - ansible_user: "{{ user_name }}"
+    - root_is_available: true
+
+  tasks:
+    - name: Check for users and ports
+      block:
+
+      - name: Check for root user on port 22
+        ansible.builtin.wait_for:
+          port: 22
+          timeout: 10
+        register: check_root_default 
+        vars:
+          - ansible_user: root
+          - host_key_checking: false
+
+      - ansible.builtin.set_fact:
+          root_is_available_on_default: true
+        when: not check_root_default.unreachable
+
+      - name: Check for root user on port {{ ssh_port }}
+        ansible.builtin.wait_for:
+          port: "{{ ssh_port }}"
+          timeout: 10
+        register: check_root_other
+        vars:
+          - ansible_user: root
+
+      - ansible.builtin.set_fact:
+          root_is_available_on_other: true
+        when: not check_root_other.unreachable
+
+      - name: Check for user '{{ user_name }}' on port 22
+        ansible.builtin.wait_for:
+          port: 22
+          timeout: 10
+        register: check_user_default
+
+      - ansible.builtin.set_fact:
+          user_is_available_on_default: true
+        when: not check_user_default.unreachable
+
+      - name: Check for user '{{ user_name }}' on port {{ ssh_port }}
+        ansible.builtin.wait_for:
+          port: "{{ ssh_port }}"
+          timeout: 10
+        register: check_user_other
+
+      - ansible.builtin.set_fact:
+          user_is_available_on_other: true
+        when: not check_user_other.unreachable
+
+      - ansible.builtin.set_fact:
+          root_is_available: true
+        when: root_is_available_on_default or root_is_available_on_other
+
+      - name: Use new port if available
+        ansible.builtin.set_fact:
+          ansible_port: "{{ ssh_port }}"
+        when: root_is_available_on_other_port or user_is_available_on_other_port
+
+      ignore_unreachable: true
+      ignore_errors: true
+      tags: always
+
+    - name: exit
+      fail:
+        msg: exit
+
+    - name: Setup known_hosts and user
+      block:
+      -
+
+       - name: Setup passwordless sudo
+        ansible.builtin.lineinfile:
+          path: /etc/sudoers
+          state: present
+          regexp: '^%sudo'
+          line: '%sudo ALL=(ALL) NOPASSWD: ALL'
+          validate: '/usr/sbin/visudo -cf %s'
+        tags: user
+
+      ignore_errors: true
+      when: root_is_available
+      vars:
+        - ansible_user: root
+
+    - name: Gathering facts
+      ansible.builtin.setup:
+      tags: always 
+
+    
+    
+    - name: Update apt and install packages
+      ansible.builtin.apt:
+        name:
+          - ufw
+        state: latest
+        update_cache: true
+      tags: firewall
+
