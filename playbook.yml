@@ -55,3 +55,8 @@
       ansible.builtin.include_role:
         name: firewall
       tags: firewall
+
+    - name: Setup fail2ban
+      ansible.builtin.include_role:
+        name: fail2ban
+      tags: fail2ban

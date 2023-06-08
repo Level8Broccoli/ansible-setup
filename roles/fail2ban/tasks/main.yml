@@ -1,0 +1,19 @@
+---
+
+- name: Install package
+  ansible.builtin.package:
+    name:
+      - fail2ban
+    state: present
+
+- name: Configuring service
+  ansible.builtin.copy:
+    src: jail.local
+    dest: /etc/fail2ban/jail.local
+  notify: reload fail2ban
+
+- name: Configuring service state
+  ansible.builtin.systemd:
+    name: fail2ban
+    state: started
+    enabled: true

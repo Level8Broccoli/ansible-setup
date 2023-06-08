@@ -10,7 +10,6 @@
   ansible.builtin.copy:
     src: ufw
     dest: /etc/default/ufw
-    mode: 0644
   notify: reload ufw
 
 - name: Applying ssh rule
